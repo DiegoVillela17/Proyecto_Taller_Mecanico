@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/services/auth_service.dart';
+import '../ajustes/ajustes_screen.dart';
 import '../mecanico/mis_trabajos_screen.dart';
 import '../tickets/tickets_screen.dart';
 import '../vehiculos/vehiculos_screen.dart';
@@ -208,6 +209,17 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Ajustes',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AjustesScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings),
+              ),
               IconButton(
                 tooltip: 'Actualizar perfil',
                 onPressed: cargando ? null : _recargarPerfil,
