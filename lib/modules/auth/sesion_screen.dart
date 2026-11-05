@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/services/auth_service.dart';
 import '../ajustes/ajustes_screen.dart';
+import '../../modules/mapa/mapa_screens.dart';
 import '../mecanico/mis_trabajos_screen.dart';
 import '../tickets/tickets_screen.dart';
 import '../vehiculos/vehiculos_screen.dart';
@@ -42,6 +43,20 @@ class _SesionScreenState extends State<SesionScreen> {
       },
     );
   }
+}
+
+class _Destino {
+  final String etiqueta;
+  final IconData icono;
+  final IconData iconoActivo;
+  final Widget pantalla;
+
+  const _Destino({
+    required this.etiqueta,
+    required this.icono,
+    required this.iconoActivo,
+    required this.pantalla,
+  });
 }
 
 class InicioRolScreen extends StatefulWidget {
@@ -96,36 +111,76 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
     }
   }
 
-  Widget _contenido(String rol) {
+  // Botones de la barra inferior según el rol.
+  List<_Destino> _destinos(String rol) {
+    const talleres = _Destino(
+      etiqueta: 'Talleres',
+      icono: Icons.map_outlined,
+      iconoActivo: Icons.map,
+      pantalla: MapaScreen(key: ValueKey('mapa')),
+    );
+
     switch (rol) {
       case 'administrador':
-        if (_pestana == 0) {
-          return const VehiculosScreen(
-            key: ValueKey('vehiculos_admin'),
-            esAdministrador: true,
-          );
-        }
-
-        return const TicketsScreen(
-          key: ValueKey('tickets_admin'),
-        );
+        return const [
+          _Destino(
+            etiqueta: 'Vehículos',
+            icono: Icons.directions_car_outlined,
+            iconoActivo: Icons.directions_car,
+            pantalla: VehiculosScreen(
+              key: ValueKey('vehiculos_admin'),
+              esAdministrador: true,
+            ),
+          ),
+          _Destino(
+            etiqueta: 'Tickets',
+            icono: Icons.receipt_long_outlined,
+            iconoActivo: Icons.receipt_long,
+            pantalla: TicketsScreen(key: ValueKey('tickets_admin')),
+          ),
+          talleres,
+        ];
 
       case 'cliente':
-        return const VehiculosScreen(
-          key: ValueKey('vehiculos_cliente'),
-          esAdministrador: false,
-        );
+        return const [
+          _Destino(
+            etiqueta: 'Vehículos',
+            icono: Icons.directions_car_outlined,
+            iconoActivo: Icons.directions_car,
+            pantalla: VehiculosScreen(
+              key: ValueKey('vehiculos_cliente'),
+              esAdministrador: false,
+            ),
+          ),
+          talleres,
+        ];
 
       case 'mecanico':
-        return const MisTrabajosScreen(
-          key: ValueKey('trabajos_mecanico'),
-        );
+        return const [
+          _Destino(
+            etiqueta: 'Mis trabajos',
+            icono: Icons.build_outlined,
+            iconoActivo: Icons.build,
+            pantalla: MisTrabajosScreen(key: ValueKey('trabajos_mecanico')),
+          ),
+          talleres,
+        ];
 
       default:
-        return const Center(
-          child: Text('Acceso denegado: el rol no es válido.'),
-        );
+        return const [];
     }
+  }
+
+  Widget _contenido(List<_Destino> destinos) {
+    if (destinos.isEmpty) {
+      return const Center(
+        child: Text('Acceso denegado: el rol no es válido.'),
+      );
+    }
+
+    final indice = _pestana < destinos.length ? _pestana : 0;
+
+    return destinos[indice].pantalla;
   }
 
   String _nombreRol(String rol) {
@@ -154,6 +209,8 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
             : null;
 
         final rol = perfil?['rol'] as String?;
+
+        final destinos = rol == null ? <_Destino>[] : _destinos(rol);
 
         final nombre = [
           perfil?['nombre'] ?? '',
@@ -188,7 +245,7 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
             ),
           );
         } else {
-          contenido = _contenido(rol ?? '');
+          contenido = _contenido(destinos);
         }
 
         return Scaffold(
@@ -233,23 +290,20 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
             ],
           ),
           body: SafeArea(child: contenido),
-          bottomNavigationBar: rol == 'administrador'
+          bottomNavigationBar: destinos.length > 1
               ? NavigationBar(
-                  selectedIndex: _pestana,
+                  selectedIndex:
+                      _pestana < destinos.length ? _pestana : 0,
                   onDestinationSelected: (index) {
                     setState(() => _pestana = index);
                   },
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.directions_car_outlined),
-                      selectedIcon: Icon(Icons.directions_car),
-                      label: 'Vehículos',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.receipt_long_outlined),
-                      selectedIcon: Icon(Icons.receipt_long),
-                      label: 'Tickets',
-                    ),
+                  destinations: [
+                    for (final destino in destinos)
+                      NavigationDestination(
+                        icon: Icon(destino.icono),
+                        selectedIcon: Icon(destino.iconoActivo),
+                        label: destino.etiqueta,
+                      ),
                   ],
                 )
               : null,
