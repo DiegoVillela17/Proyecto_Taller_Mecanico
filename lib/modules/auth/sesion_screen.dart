@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/services/auth_service.dart';
-import 'acceso_screen.dart';
-
+import '../mecanico/mis_trabajos_screen.dart';
+import '../tickets/tickets_screen.dart';
 import '../vehiculos/vehiculos_screen.dart';
+import 'acceso_screen.dart';
 
 class SesionScreen extends StatefulWidget {
   const SesionScreen({super.key});
@@ -28,21 +29,6 @@ class _SesionScreenState extends State<SesionScreen> {
     return StreamBuilder<AuthState>(
       stream: _eventos,
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Scaffold(
-            body: Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No se pudo actualizar la sesión. '
-                  'Revisa tu conexión y vuelve a abrir la aplicación.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          );
-        }
-
         final sesion = _auth.sesion;
 
         if (sesion == null) {
@@ -66,8 +52,11 @@ class InicioRolScreen extends StatefulWidget {
 
 class _InicioRolScreenState extends State<InicioRolScreen> {
   final _auth = AuthService();
+
   late Future<Map<String, dynamic>> _perfil;
+
   bool _cerrando = false;
+  int _pestana = 0;
 
   @override
   void initState() {
@@ -75,13 +64,16 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
     _perfil = _auth.obtenerPerfil();
   }
 
-  void _recargar() {
+  void _recargarPerfil() {
     setState(() {
+      _pestana = 0;
       _perfil = _auth.obtenerPerfil();
     });
   }
 
   Future<void> _salir() async {
+    if (_cerrando) return;
+
     setState(() => _cerrando = true);
 
     try {
@@ -91,7 +83,9 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No se pudo cerrar la sesión. Inténtalo otra vez.'),
+          content: Text(
+            'No se pudo cerrar la sesión. Inténtalo otra vez.',
+          ),
         ),
       );
     } finally {
@@ -101,148 +95,154 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mi Taller'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar perfil',
-            onPressed: _recargar,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            onPressed: _cerrando ? null : _salir,
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _perfil,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError || !snapshot.hasData) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'No se pudo cargar tu perfil. '
-                      'Comprueba tu conexión y que exista tu registro '
-                      'en la tabla usuarios.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: _recargar,
-                      child: const Text('Reintentar'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final perfil = snapshot.data!;
-          final rol = perfil['rol'] as String?;
-          if (rol == 'administrador' || rol == 'cliente') {
-          return VehiculosScreen(
-            key: ValueKey('${perfil['id_usuario']}-$rol'),
-            esAdministrador: rol == 'administrador',
+  Widget _contenido(String rol) {
+    switch (rol) {
+      case 'administrador':
+        if (_pestana == 0) {
+          return const VehiculosScreen(
+            key: ValueKey('vehiculos_admin'),
+            esAdministrador: true,
           );
         }
-          final nombre =
-              '${perfil['nombre'] ?? ''} ${perfil['apellidos'] ?? ''}'.trim();
 
-          final String titulo;
-          final String descripcion;
-          final IconData icono;
+        return const TicketsScreen(
+          key: ValueKey('tickets_admin'),
+        );
 
-          switch (rol) {
-            case 'administrador':
-              titulo = 'Panel del administrador';
-              descripcion =
-                  'Desde este perfil gestionarás vehículos, tickets, '
-                  'servicios, precios y asignaciones.';
-              icono = Icons.admin_panel_settings_outlined;
-              break;
-            case 'mecanico':
-              titulo = 'Panel del mecánico';
-              descripcion =
-                  'Desde este perfil consultarás los trabajos '
-                  'y las revisiones que tienes asignados.';
-              icono = Icons.build_outlined;
-              break;
-            case 'cliente':
-              titulo = 'Panel del cliente';
-              descripcion =
-                  'Desde este perfil consultarás tus vehículos, '
-                  'servicios y el avance de tus tickets.';
-              icono = Icons.directions_car_outlined;
-              break;
-            default:
-              return const Center(
-                child: Text('Acceso denegado: el rol no es válido.'),
-              );
-          }
+      case 'cliente':
+        return const VehiculosScreen(
+          key: ValueKey('vehiculos_cliente'),
+          esAdministrador: false,
+        );
 
-          return Center(
-            child: SingleChildScrollView(
+      case 'mecanico':
+        return const MisTrabajosScreen(
+          key: ValueKey('trabajos_mecanico'),
+        );
+
+      default:
+        return const Center(
+          child: Text('Acceso denegado: el rol no es válido.'),
+        );
+    }
+  }
+
+  String _nombreRol(String rol) {
+    switch (rol) {
+      case 'administrador':
+        return 'Administrador';
+      case 'mecanico':
+        return 'Mecánico';
+      case 'cliente':
+        return 'Cliente';
+      default:
+        return 'Sin acceso';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _perfil,
+      builder: (context, snapshot) {
+        final cargando =
+            snapshot.connectionState != ConnectionState.done;
+
+        final perfil = !cargando && !snapshot.hasError
+            ? snapshot.data
+            : null;
+
+        final rol = perfil?['rol'] as String?;
+
+        final nombre = [
+          perfil?['nombre'] ?? '',
+          perfil?['apellidos'] ?? '',
+        ].join(' ').trim();
+
+        Widget contenido;
+
+        if (cargando) {
+          contenido = const Center(
+            child: CircularProgressIndicator(),
+          );
+        } else if (snapshot.hasError || perfil == null) {
+          contenido = Center(
+            child: Padding(
               padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(28),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          icono,
-                          size: 64,
-                          color: const Color(0xFF1565C0),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          nombre.isEmpty ? 'Bienvenido' : 'Hola, $nombre',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          titulo,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          descripcion,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        const Chip(
-                          avatar: Icon(Icons.check_circle_outline),
-                          label: Text('Cuenta conectada'),
-                        ),
-                      ],
-                    ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'No se pudo cargar tu perfil. '
+                    'Revisa tu conexión e inténtalo otra vez.',
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  OutlinedButton(
+                    onPressed: _recargarPerfil,
+                    child: const Text('Reintentar'),
+                  ),
+                ],
               ),
             ),
           );
-        },
-      ),
+        } else {
+          contenido = _contenido(rol ?? '');
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Mi Taller'),
+                if (rol != null)
+                  Text(
+                    nombre.isEmpty
+                        ? _nombreRol(rol)
+                        : '$nombre · ${_nombreRol(rol)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Actualizar perfil',
+                onPressed: cargando ? null : _recargarPerfil,
+                icon: const Icon(Icons.refresh),
+              ),
+              IconButton(
+                tooltip: 'Cerrar sesión',
+                onPressed: _cerrando ? null : _salir,
+                icon: const Icon(Icons.logout),
+              ),
+            ],
+          ),
+          body: SafeArea(child: contenido),
+          bottomNavigationBar: rol == 'administrador'
+              ? NavigationBar(
+                  selectedIndex: _pestana,
+                  onDestinationSelected: (index) {
+                    setState(() => _pestana = index);
+                  },
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.directions_car_outlined),
+                      selectedIcon: Icon(Icons.directions_car),
+                      label: 'Vehículos',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.receipt_long_outlined),
+                      selectedIcon: Icon(Icons.receipt_long),
+                      label: 'Tickets',
+                    ),
+                  ],
+                )
+              : null,
+        );
+      },
     );
   }
 }
