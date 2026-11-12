@@ -54,6 +54,25 @@ class AjustesScreen extends StatelessWidget {
                 );
               },
             ),
+            const SizedBox(height: 32),
+            Text(
+              'Ayuda',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Card(
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                leading: const Icon(Icons.help_outline),
+                title: const Text('Ver tutorial'),
+                subtitle: const Text('Repasa cómo funciona la aplicación'),
+                trailing: const Icon(Icons.chevron_right),
+                // Regresa a la pantalla principal indicando que se
+                // quiere ver el tutorial.
+                onTap: () => Navigator.of(context).pop(true),
+              ),
+            ),
           ],
         ),
       ),
