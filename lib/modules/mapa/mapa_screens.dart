@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -40,6 +43,13 @@ class _MapaScreenState extends State<MapaScreen> {
   String? _errorTalleres;
   String? _avisoUbicacion;
   String? _seleccionado;
+
+  // Ruta "cómo llegar".
+  List<LatLng> _ruta = [];
+  String? _rutaDestino;
+  double? _rutaMetros;
+  double? _rutaSegundos;
+  bool _calculandoRuta = false;
 
   bool _cargandoTalleres = true;
   bool _buscandoUbicacion = false;
@@ -244,6 +254,124 @@ class _MapaScreenState extends State<MapaScreen> {
     return '${(metros / 1000).toStringAsFixed(1)} km';
   }
 
+  void _mensaje(String texto) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(texto)),
+    );
+  }
+
+  String _formatoDuracion(double? segundos) {
+    if (segundos == null) return '';
+
+    final minutos = (segundos / 60).round();
+
+    if (minutos < 1) return 'menos de 1 min';
+    if (minutos < 60) return '$minutos min';
+
+    final horas = minutos ~/ 60;
+    final resto = minutos % 60;
+
+    return resto == 0 ? '$horas h' : '$horas h $resto min';
+  }
+
+  void _limpiarRuta() {
+    setState(() {
+      _ruta = [];
+      _rutaDestino = null;
+      _rutaMetros = null;
+      _rutaSegundos = null;
+    });
+  }
+
+  // Calcula la ruta en coche con OSRM. El motor de rutas usa las calles de
+  // OpenStreetMap, así que respeta sentidos de circulación y giros
+  // prohibidos.
+  Future<void> _comoLlegar(_Taller taller) async {
+    if (_calculandoRuta) return;
+
+    if (_miUbicacion == null) {
+      await _obtenerUbicacion();
+    }
+
+    final origen = _miUbicacion;
+
+    if (origen == null) {
+      _mensaje(
+        _avisoUbicacion ??
+            'Necesitamos tu ubicación para calcular la ruta.',
+      );
+      return;
+    }
+
+    setState(() => _calculandoRuta = true);
+
+    try {
+      final url = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving/'
+        '${origen.longitude},${origen.latitude};'
+        '${taller.punto.longitude},${taller.punto.latitude}'
+        '?overview=full&geometries=geojson&steps=false',
+      );
+
+      final respuesta = await http.get(url).timeout(
+            const Duration(seconds: 15),
+          );
+
+      if (respuesta.statusCode != 200) {
+        throw Exception('OSRM ${respuesta.statusCode}');
+      }
+
+      final datos = jsonDecode(respuesta.body) as Map<String, dynamic>;
+      final rutas = datos['routes'] as List<dynamic>?;
+
+      if (datos['code'] != 'Ok' || rutas == null || rutas.isEmpty) {
+        _mensaje('No se encontró una ruta hasta este taller.');
+        return;
+      }
+
+      final ruta = rutas.first as Map<String, dynamic>;
+      final coordenadas =
+          (ruta['geometry'] as Map<String, dynamic>)['coordinates']
+              as List<dynamic>;
+
+      final puntos = [
+        for (final c in coordenadas)
+          LatLng(
+            ((c as List<dynamic>)[1] as num).toDouble(),
+            (c[0] as num).toDouble(),
+          ),
+      ];
+
+      if (!mounted) return;
+
+      setState(() {
+        _ruta = puntos;
+        _rutaDestino = taller.nombre;
+        _rutaMetros = (ruta['distance'] as num).toDouble();
+        _rutaSegundos = (ruta['duration'] as num).toDouble();
+        _seleccionado = taller.id;
+      });
+
+      _mapa.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(puntos),
+          padding: const EdgeInsets.fromLTRB(40, 90, 40, 40),
+        ),
+      );
+    } catch (_) {
+      _mensaje(
+        'No se pudo calcular la ruta. Revisa tu conexión e inténtalo '
+        'otra vez.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _calculandoRuta = false);
+      }
+    }
+  }
+
   void _seleccionar(_Taller taller) {
     setState(() => _seleccionado = taller.id);
     _mapa.move(taller.punto, 15);
@@ -293,6 +421,18 @@ class _MapaScreenState extends State<MapaScreen> {
                   telefono == null || telefono.isEmpty
                       ? 'Teléfono sin registrar'
                       : telefono,
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _comoLlegar(taller);
+                    },
+                    icon: const Icon(Icons.directions),
+                    label: const Text('Cómo llegar'),
+                  ),
                 ),
               ],
             ),
@@ -465,6 +605,18 @@ class _MapaScreenState extends State<MapaScreen> {
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'taller_app',
                   ),
+                  if (_ruta.isNotEmpty)
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: _ruta,
+                          strokeWidth: 6,
+                          color: colores.primary,
+                          borderStrokeWidth: 2,
+                          borderColor: Colors.white,
+                        ),
+                      ],
+                    ),
                   MarkerLayer(
                     markers: [
                       for (final taller in _talleres)
@@ -516,6 +668,54 @@ class _MapaScreenState extends State<MapaScreen> {
                       : const Icon(Icons.my_location),
                 ),
               ),
+              if (_calculandoRuta)
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              if (_ruta.isNotEmpty)
+                Positioned(
+                  left: 12,
+                  right: 64,
+                  top: 12,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.directions_car, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _rutaDestino ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  '${_formatoDuracion(_rutaSegundos)} · '
+                                  '${_formatoDistancia(_rutaMetros)}',
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Quitar ruta',
+                            onPressed: _limpiarRuta,
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
