@@ -6,7 +6,10 @@ import 'ticket_detalle_screen.dart';
 import 'ticket_form_screen.dart';
 
 class TicketsScreen extends StatefulWidget {
-  const TicketsScreen({super.key});
+  // En modo solo lectura (clientes) no se pueden crear tickets.
+  final bool soloLectura;
+
+  const TicketsScreen({super.key, this.soloLectura = false});
 
   @override
   State<TicketsScreen> createState() => _TicketsScreenState();
@@ -47,7 +50,10 @@ class _TicketsScreenState extends State<TicketsScreen> {
   Future<void> _abrirDetalle(String idTicket) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => TicketDetalleScreen(idTicket: idTicket),
+        builder: (_) => TicketDetalleScreen(
+          idTicket: idTicket,
+          soloLectura: widget.soloLectura,
+        ),
       ),
     );
 
@@ -98,7 +104,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Tickets del taller',
+                widget.soloLectura ? 'Mis tickets' : 'Tickets del taller',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 16),
@@ -114,13 +120,16 @@ class _TicketsScreenState extends State<TicketsScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _crear,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Nuevo ticket'),
+                  if (widget.soloLectura)
+                    const Spacer()
+                  else
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _crear,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Nuevo ticket'),
+                      ),
                     ),
-                  ),
                   IconButton(
                     tooltip: 'Actualizar tickets',
                     onPressed: _recargar,

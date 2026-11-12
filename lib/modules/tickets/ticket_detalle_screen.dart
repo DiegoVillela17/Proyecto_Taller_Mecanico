@@ -6,9 +6,13 @@ import '../../shared/services/tickets_service.dart';
 class TicketDetalleScreen extends StatefulWidget {
   final String idTicket;
 
+  // En modo solo lectura (clientes) no se pueden agregar servicios.
+  final bool soloLectura;
+
   const TicketDetalleScreen({
     super.key,
     required this.idTicket,
+    this.soloLectura = false,
   });
 
   @override
@@ -270,14 +274,18 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: _abriendoFormulario ? null : _agregarServicio,
-                  icon: const Icon(Icons.add),
-                  label: Text(
-                    _abriendoFormulario ? 'Cargando...' : 'Agregar servicio',
+                if (!widget.soloLectura) ...[
+                  FilledButton.icon(
+                    onPressed: _abriendoFormulario ? null : _agregarServicio,
+                    icon: const Icon(Icons.add),
+                    label: Text(
+                      _abriendoFormulario
+                          ? 'Cargando...'
+                          : 'Agregar servicio',
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ],
                 if (detalles.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(16),

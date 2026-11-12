@@ -156,7 +156,10 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
             ? 'Consulta, agrega y edita los vehículos de los clientes.'
             : 'Consulta la información de tus vehículos y sus servicios.';
       case 'Tickets':
-        return 'Revisa los tickets de ingreso, sus servicios y su estado.';
+        return rol == 'administrador'
+            ? 'Revisa los tickets de ingreso, sus servicios y su estado.'
+            : 'Consulta el estado, los servicios y el costo de los '
+                'tickets de tus vehículos.';
       case 'Mis trabajos':
         return 'Consulta los servicios que tienes asignados.';
       case 'Talleres':
@@ -259,6 +262,15 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
             ),
           ),
           talleres,
+          _Destino(
+            etiqueta: 'Tickets',
+            icono: Icons.receipt_long_outlined,
+            iconoActivo: Icons.receipt_long,
+            pantalla: TicketsScreen(
+              key: ValueKey('tickets_cliente'),
+              soloLectura: true,
+            ),
+          ),
         ];
 
       case 'mecanico':
