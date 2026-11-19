@@ -55,6 +55,8 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
   Future<void> _abrirFormulario({
     Map<String, dynamic>? vehiculo,
   }) async {
+    if (!widget.esAdministrador) return;
+
     final guardado = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => VehiculoFormScreen(vehiculo: vehiculo),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../shared/services/vehiculos_service.dart';
+import '../../shared/widgets/campos_vehiculo_api.dart';
 
 class VehiculoFormScreen extends StatefulWidget {
   final Map<String, dynamic>? vehiculo;
@@ -95,32 +96,6 @@ class _VehiculoFormScreenState extends State<VehiculoFormScreen> {
         setState(() => _guardando = false);
       }
     }
-  }
-
-  Widget _campo(
-    TextEditingController controller,
-    String etiqueta,
-    IconData icono,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        controller: controller,
-        enabled: !_guardando,
-        textCapitalization: TextCapitalization.words,
-        decoration: InputDecoration(
-          labelText: etiqueta,
-          prefixIcon: Icon(icono),
-        ),
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Completa este campo.';
-          }
-
-          return null;
-        },
-      ),
-    );
   }
 
   Widget _aviso(String texto) {
@@ -231,15 +206,10 @@ class _VehiculoFormScreenState extends State<VehiculoFormScreen> {
                             },
                           ),
                         ),
-                      _campo(
-                        _marca,
-                        'Marca',
-                        Icons.directions_car_outlined,
-                      ),
-                      _campo(
-                        _modelo,
-                        'Modelo',
-                        Icons.car_repair_outlined,
+                      CamposVehiculoApi(
+                        marca: _marca,
+                        modelo: _modelo,
+                        enabled: !_guardando,
                       ),
                       TextFormField(
                         controller: _anio,
