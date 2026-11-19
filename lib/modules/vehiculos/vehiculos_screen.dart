@@ -1,3 +1,4 @@
+import '../../shared/widgets/foto_vehiculo.dart';
 import 'package:flutter/material.dart';
 
 import '../../shared/services/vehiculos_service.dart';
@@ -6,10 +7,7 @@ import 'vehiculo_form_screen.dart';
 class VehiculosScreen extends StatefulWidget {
   final bool esAdministrador;
 
-  const VehiculosScreen({
-    super.key,
-    required this.esAdministrador,
-  });
+  const VehiculosScreen({super.key, required this.esAdministrador});
 
   @override
   State<VehiculosScreen> createState() => _VehiculosScreenState();
@@ -35,9 +33,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _consultar() {
-    return _service.listar(
-      esAdministrador: widget.esAdministrador,
-    );
+    return _service.listar(esAdministrador: widget.esAdministrador);
   }
 
   Future<void> _recargar() async {
@@ -52,18 +48,18 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
     } catch (_) {}
   }
 
-  Future<void> _abrirFormulario({
-    Map<String, dynamic>? vehiculo,
-  }) async {
-    if (!widget.esAdministrador) return;
+  Future<void> _abrirFormulario({Map<String, dynamic>? vehiculo}) async {
+    if (!widget.esAdministrador) {
+      return;
+    }
 
     final guardado = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => VehiculoFormScreen(vehiculo: vehiculo),
-      ),
+      MaterialPageRoute(builder: (_) => VehiculoFormScreen(vehiculo: vehiculo)),
     );
 
-    if (!mounted || guardado != true) return;
+    if (!mounted || guardado != true) {
+      return;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -99,7 +95,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
             children: [
               Text(
                 widget.esAdministrador
-                    ? 'Vehículos del taller'
+                    ? 'Vehículos registrados'
                     : 'Mis vehículos',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
@@ -193,8 +189,8 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
                     child: Text(
                       todos.isEmpty
                           ? widget.esAdministrador
-                              ? 'Todavía no hay vehículos. Registra el primero.'
-                              : 'Todavía no tienes vehículos registrados.'
+                                ? 'Todavía no hay vehículos. Registra el primero.'
+                                : 'Todavía no tienes vehículos registrados. El taller los agregará al recibir tu automóvil.'
                           : 'No hay vehículos que coincidan con tu búsqueda.',
                       textAlign: TextAlign.center,
                     ),
@@ -245,13 +241,16 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
                                 if (widget.esAdministrador)
                                   IconButton(
                                     tooltip: 'Editar vehículo',
-                                    onPressed: () => _abrirFormulario(
-                                      vehiculo: vehiculo,
-                                    ),
+                                    onPressed: () =>
+                                        _abrirFormulario(vehiculo: vehiculo),
                                     icon: const Icon(Icons.edit_outlined),
                                   ),
                               ],
                             ),
+                            if (vehiculo['foto_path'] != null)
+                              FotoVehiculo(
+                                path: vehiculo['foto_path'] as String,
+                              ),
                             const SizedBox(height: 14),
                             Text('Placas: ${vehiculo['placas']}'),
                             const SizedBox(height: 6),

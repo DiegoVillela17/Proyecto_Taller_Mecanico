@@ -41,7 +41,9 @@ class AuthService {
 
     final perfil = await _client
         .from('usuarios')
-        .select('id_usuario, nombre, apellidos, telefono, rol')
+        .select(
+          'id_usuario, nombre, apellidos, telefono, rol, activo, tutorial_visto, id_sucursal, sucursal:sucursales(nombre)',
+        )
         .eq('id_usuario', usuario.id)
         .maybeSingle();
 

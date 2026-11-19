@@ -1,5 +1,6 @@
+import '../personal/personal_screen.dart';
+import '../sucursales/sucursales_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -39,9 +40,7 @@ class _SesionScreenState extends State<SesionScreen> {
           return const AccesoScreen();
         }
 
-        return InicioRolScreen(
-          key: ValueKey(sesion.user.id),
-        );
+        return InicioRolScreen(key: ValueKey(sesion.user.id));
       },
     );
   }
@@ -79,7 +78,6 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
   // Tutorial (showcaseview).
   final _claveTitulo = GlobalKey();
   final _claveAjustes = GlobalKey();
-  final _claveActualizar = GlobalKey();
   final _claveSalir = GlobalKey();
   final _clavesDestinos = <String, GlobalKey>{};
   String? _rol;
@@ -98,10 +96,12 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
 
     // Cuando carga el perfil se sabe el rol; si el usuario es nuevo
     // se muestra el tutorial automáticamente.
-    _perfil.then((perfil) {
-      _rol = perfil['rol'] as String?;
-      return _tutorialSiEsNuevo();
-    }).catchError((_) {});
+    _perfil
+        .then((perfil) {
+          _rol = perfil['rol'] as String?;
+          return _tutorialSiEsNuevo();
+        })
+        .catchError((_) {});
   }
 
   @override
@@ -113,15 +113,19 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
   Future<void> _tutorialSiEsNuevo() async {
     final idUsuario = Supabase.instance.client.auth.currentUser?.id;
 
-    if (idUsuario == null) return;
+    if (idUsuario == null) {
+      return;
+    }
 
-    final prefs = await SharedPreferences.getInstance();
-    final clave = 'tutorial_visto_$idUsuario';
-
-    if (prefs.getBool(clave) ?? false) return;
-
-    // Se marca como visto al iniciarlo, así no se repite en cada sesión.
-    await prefs.setBool(clave, true);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted ||
+        Supabase.instance.client.auth.currentUser?.id != idUsuario) {
+      return;
+    }
+    final mostrar = await Supabase.instance.client.rpc('reclamar_tutorial');
+    if (mostrar != true || !mounted) {
+      return;
+    }
 
     _iniciarTutorial();
   }
@@ -129,13 +133,17 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
   Future<void> _iniciarTutorial() async {
     final rol = _rol;
 
-    if (rol == null) return;
+    if (rol == null) {
+      return;
+    }
 
     // Pequeña espera para que termine de construirse la pantalla
     // (o la animación al volver desde Ajustes).
     await Future<void>.delayed(const Duration(milliseconds: 500));
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     final destinos = _destinos(rol);
 
@@ -144,7 +152,6 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
       if (destinos.length > 1)
         for (final destino in destinos) _claveDestino(destino.etiqueta),
       _claveAjustes,
-      _claveActualizar,
       _claveSalir,
     ]);
   }
@@ -159,9 +166,13 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
         return rol == 'administrador'
             ? 'Revisa los tickets de ingreso, sus servicios y su estado.'
             : 'Consulta el estado, los servicios y el costo de los '
-                'tickets de tus vehículos.';
+                  'tickets de tus vehículos.';
       case 'Mis trabajos':
         return 'Consulta los servicios que tienes asignados.';
+      case 'Personal':
+        return 'Registra mecánicos y administra su sucursal y disponibilidad.';
+      case 'Sucursales':
+        return 'Consulta los tickets y el personal de cada sucursal.';
       case 'Talleres':
         return 'Mira en el mapa tu ubicación y los talleres cercanos. '
             'Toca uno para ver su información.';
@@ -192,25 +203,30 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
   void _recargarPerfil() {
     setState(() {
       _pestana = 0;
-      _perfil = _auth.obtenerPerfil();
+      _perfil = _auth.obtenerPerfil().then((p) {
+        _rol = p['rol'] as String?;
+        return p;
+      });
     });
   }
 
   Future<void> _salir() async {
-    if (_cerrando) return;
+    if (_cerrando) {
+      return;
+    }
 
     setState(() => _cerrando = true);
 
     try {
       await _auth.cerrarSesion();
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'No se pudo cerrar la sesión. Inténtalo otra vez.',
-          ),
+          content: Text('No se pudo cerrar la sesión. Inténtalo otra vez.'),
         ),
       );
     } finally {
@@ -233,55 +249,54 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
       case 'administrador':
         return const [
           _Destino(
-            etiqueta: 'Vehículos',
-            icono: Icons.directions_car_outlined,
-            iconoActivo: Icons.directions_car,
-            pantalla: VehiculosScreen(
-              key: ValueKey('vehiculos_admin'),
-              esAdministrador: true,
-            ),
-          ),
-          _Destino(
             etiqueta: 'Tickets',
             icono: Icons.receipt_long_outlined,
             iconoActivo: Icons.receipt_long,
-            pantalla: TicketsScreen(key: ValueKey('tickets_admin')),
+            pantalla: TicketsScreen(),
           ),
-          talleres,
+          _Destino(
+            etiqueta: 'Vehículos',
+            icono: Icons.directions_car_outlined,
+            iconoActivo: Icons.directions_car,
+            pantalla: VehiculosScreen(esAdministrador: true),
+          ),
+          _Destino(
+            etiqueta: 'Sucursales',
+            icono: Icons.store_outlined,
+            iconoActivo: Icons.store,
+            pantalla: SucursalesScreen(),
+          ),
+          _Destino(
+            etiqueta: 'Personal',
+            icono: Icons.people_outline,
+            iconoActivo: Icons.people,
+            pantalla: PersonalScreen(),
+          ),
         ];
-
       case 'cliente':
         return const [
           _Destino(
-            etiqueta: 'Vehículos',
-            icono: Icons.directions_car_outlined,
-            iconoActivo: Icons.directions_car,
-            pantalla: VehiculosScreen(
-              key: ValueKey('vehiculos_cliente'),
-              esAdministrador: false,
-            ),
-          ),
-          talleres,
-          _Destino(
             etiqueta: 'Tickets',
             icono: Icons.receipt_long_outlined,
             iconoActivo: Icons.receipt_long,
-            pantalla: TicketsScreen(
-              key: ValueKey('tickets_cliente'),
-              soloLectura: true,
-            ),
+            pantalla: TicketsScreen(soloLectura: true),
           ),
+          _Destino(
+            etiqueta: 'Vehículos',
+            icono: Icons.directions_car_outlined,
+            iconoActivo: Icons.directions_car,
+            pantalla: VehiculosScreen(esAdministrador: false),
+          ),
+          talleres,
         ];
-
       case 'mecanico':
         return const [
           _Destino(
             etiqueta: 'Mis trabajos',
             icono: Icons.build_outlined,
             iconoActivo: Icons.build,
-            pantalla: MisTrabajosScreen(key: ValueKey('trabajos_mecanico')),
+            pantalla: MisTrabajosScreen(),
           ),
-          talleres,
         ];
 
       default:
@@ -291,9 +306,7 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
 
   Widget _contenido(List<_Destino> destinos) {
     if (destinos.isEmpty) {
-      return const Center(
-        child: Text('Acceso denegado: el rol no es válido.'),
-      );
+      return const Center(child: Text('Acceso denegado: el rol no es válido.'));
     }
 
     final indice = _pestana < destinos.length ? _pestana : 0;
@@ -319,16 +332,16 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
     return FutureBuilder<Map<String, dynamic>>(
       future: _perfil,
       builder: (context, snapshot) {
-        final cargando =
-            snapshot.connectionState != ConnectionState.done;
+        final cargando = snapshot.connectionState != ConnectionState.done;
 
-        final perfil = !cargando && !snapshot.hasError
-            ? snapshot.data
-            : null;
+        final perfil = !cargando && !snapshot.hasError ? snapshot.data : null;
 
         final rol = perfil?['rol'] as String?;
 
-        final destinos = rol == null ? <_Destino>[] : _destinos(rol);
+        final destinos = rol == null || perfil?['activo'] != true
+            ? <_Destino>[]
+            : _destinos(rol);
+        final sucursal = perfil?['sucursal'] as Map<String, dynamic>?;
 
         final nombre = [
           perfil?['nombre'] ?? '',
@@ -338,9 +351,7 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
         Widget contenido;
 
         if (cargando) {
-          contenido = const Center(
-            child: CircularProgressIndicator(),
-          );
+          contenido = const Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError || perfil == null) {
           contenido = Center(
             child: Padding(
@@ -362,6 +373,15 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
               ),
             ),
           );
+        } else if (perfil['activo'] != true) {
+          contenido = const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Tu cuenta está inactiva. Contacta al administrador del taller. Cuando la active, cierra sesión y vuelve a entrar.',
+              ),
+            ),
+          );
         } else {
           contenido = _contenido(destinos);
         }
@@ -371,7 +391,8 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
             title: _paso(
               clave: _claveTitulo,
               titulo: '¡Bienvenido a Mi Taller!',
-              descripcion: 'Aquí ves tu nombre y tu rol. '
+              descripcion:
+                  'Aquí ves tu nombre y tu rol. '
                   'Te mostramos rápido cómo usar la aplicación.',
               hijo: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,7 +402,7 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
                     Text(
                       nombre.isEmpty
                           ? _nombreRol(rol)
-                          : '$nombre · ${_nombreRol(rol)}',
+                          : '$nombre · ${_nombreRol(rol)}${sucursal == null ? '' : ' · ${sucursal['nombre']}'}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12),
@@ -393,34 +414,26 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
               _paso(
                 clave: _claveAjustes,
                 titulo: 'Ajustes',
-                descripcion: 'Cambia entre modo claro y oscuro y '
+                descripcion:
+                    'Cambia entre modo claro y oscuro y '
                     'vuelve a ver este tutorial cuando quieras.',
                 hijo: IconButton(
                   tooltip: 'Ajustes',
-                  onPressed: () async {
-                    final verTutorial =
-                        await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(
-                        builder: (_) => const AjustesScreen(),
-                      ),
-                    );
+                  onPressed: perfil?['activo'] != true
+                      ? null
+                      : () async {
+                          final verTutorial = await Navigator.of(context)
+                              .push<bool>(
+                                MaterialPageRoute(
+                                  builder: (_) => const AjustesScreen(),
+                                ),
+                              );
 
-                    if (verTutorial == true) {
-                      _iniciarTutorial();
-                    }
-                  },
+                          if (verTutorial == true) {
+                            _iniciarTutorial();
+                          }
+                        },
                   icon: const Icon(Icons.settings),
-                ),
-              ),
-              _paso(
-                clave: _claveActualizar,
-                titulo: 'Actualizar perfil',
-                descripcion: 'Vuelve a cargar tu perfil y tu rol '
-                    'si algo cambió.',
-                hijo: IconButton(
-                  tooltip: 'Actualizar perfil',
-                  onPressed: cargando ? null : _recargarPerfil,
-                  icon: const Icon(Icons.refresh),
                 ),
               ),
               _paso(
@@ -438,8 +451,7 @@ class _InicioRolScreenState extends State<InicioRolScreen> {
           body: SafeArea(child: contenido),
           bottomNavigationBar: destinos.length > 1
               ? NavigationBar(
-                  selectedIndex:
-                      _pestana < destinos.length ? _pestana : 0,
+                  selectedIndex: _pestana < destinos.length ? _pestana : 0,
                   onDestinationSelected: (index) {
                     setState(() => _pestana = index);
                   },

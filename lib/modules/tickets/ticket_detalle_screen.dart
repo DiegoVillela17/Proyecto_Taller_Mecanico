@@ -1,3 +1,5 @@
+import '../../shared/widgets/foto_vehiculo.dart';
+import 'ticket_editar_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -35,8 +37,9 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
         .from('tickets')
         .select(
           '*, '
-          'vehiculo:vehiculos(marca, modelo, anio, placas), '
-          'sucursal:sucursales(nombre)',
+          'vehiculo:vehiculos(marca, modelo, anio, placas, foto_path), '
+          'sucursal:sucursales(nombre), '
+          'revision:usuarios!tickets_id_mecanico_revision_fkey(nombre,apellidos)',
         )
         .eq('id_ticket', widget.idTicket)
         .single();
@@ -52,14 +55,13 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
         .eq('id_ticket', widget.idTicket)
         .order('creado_en');
 
-    return {
-      'ticket': ticket,
-      'detalles': detalles,
-    };
+    return {'ticket': ticket, 'detalles': detalles};
   }
 
   Future<void> _recargar() async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     final consulta = _consultar();
     setState(() => _datos = consulta);
@@ -70,15 +72,21 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
   }
 
   String _dinero(dynamic valor) {
-    if (valor == null) return 'Por cotizar';
+    if (valor == null) {
+      return 'Por cotizar';
+    }
     return '\$${(valor as num).toStringAsFixed(2)} MXN';
   }
 
   String _fecha(dynamic valor) {
-    if (valor == null) return 'Sin registrar';
+    if (valor == null) {
+      return 'Sin registrar';
+    }
 
     final fecha = DateTime.tryParse(valor.toString())?.toLocal();
-    if (fecha == null) return 'Sin registrar';
+    if (fecha == null) {
+      return 'Sin registrar';
+    }
 
     String dos(int numero) => numero.toString().padLeft(2, '0');
 
@@ -86,8 +94,10 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
         '${dos(fecha.hour)}:${dos(fecha.minute)}';
   }
 
-  Future<void> _agregarServicio() async {
-    if (_abriendoFormulario) return;
+  Future<void> _agregarServicio([Map<String, dynamic>? detalle]) async {
+    if (_abriendoFormulario) {
+      return;
+    }
 
     setState(() => _abriendoFormulario = true);
 
@@ -98,20 +108,47 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
           .eq('activo', true)
           .order('nombre');
 
+      final datos = await _datos;
+      final ticket = datos['ticket'] as Map<String, dynamic>;
       final mecanicos = await _client
           .from('usuarios')
           .select('id_usuario, nombre, apellidos')
           .eq('rol', 'mecanico')
+          .eq('activo', true)
+          .eq('id_sucursal', ticket['id_sucursal'])
           .order('nombre');
+      if (detalle != null &&
+          detalle['id_mecanico'] != null &&
+          !mecanicos.any((m) => m['id_usuario'] == detalle['id_mecanico'])) {
+        final anterior = await _client
+            .from('usuarios')
+            .select('id_usuario,nombre,apellidos')
+            .eq('id_usuario', detalle['id_mecanico'])
+            .maybeSingle();
+        if (anterior != null) {
+          mecanicos.add(anterior);
+        }
+      }
+      if (detalle != null &&
+          !servicios.any((s) => s['id_servicio'] == detalle['id_servicio'])) {
+        servicios.add({
+          'id_servicio': detalle['id_servicio'],
+          'nombre':
+              (detalle['servicio'] as Map<String, dynamic>?)?['nombre'] ??
+              'Servicio anterior',
+        });
+      }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (servicios.isEmpty || mecanicos.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
               'Necesitas al menos un servicio activo '
-              'y una cuenta con rol mecánico.',
+              'y un mecánico activo en la sucursal del ticket.',
             ),
           ),
         );
@@ -123,28 +160,94 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
         barrierDismissible: false,
         builder: (_) => _AgregarServicioDialog(
           idTicket: widget.idTicket,
+          detalle: detalle,
           servicios: servicios,
           mecanicos: mecanicos,
         ),
       );
 
-      if (!mounted || guardado != true) return;
+      if (!mounted || guardado != true) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Servicio agregado y mecánico asignado.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Servicio guardado.')));
 
       await _recargar();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(TicketsService.mensajeError(error)),
-        ),
+        SnackBar(content: Text(TicketsService.mensajeError(error))),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _abriendoFormulario = false);
+      }
+    }
+  }
+
+  Future<void> _editarTicket(Map<String, dynamic> ticket) async {
+    final cambio = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => TicketEditarScreen(ticket: ticket)),
+    );
+    if (mounted && cambio == true) {
+      await _recargar();
+    }
+  }
+
+  Future<void> _avanzarServicio(Map<String, dynamic> detalle) async {
+    if (_abriendoFormulario) {
+      return;
+    }
+    final iniciar = detalle['fecha_inicio'] == null;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(iniciar ? 'Iniciar servicio' : 'Finalizar servicio'),
+        content: const Text(
+          'Se registrará la fecha y hora actual. Confirma que este avance ya ocurrió.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmar != true) {
+      return;
+    }
+    setState(() => _abriendoFormulario = true);
+    try {
+      await _client
+          .from('detalle_ticket')
+          .update({
+            iniciar ? 'fecha_inicio' : 'fecha_fin': DateTime.now()
+                .toUtc()
+                .toIso8601String(),
+          })
+          .eq('id_detalle', detalle['id_detalle'])
+          .eq('actualizado_en', detalle['actualizado_en'])
+          .select('id_detalle')
+          .single();
+      if (mounted) {
+        await _recargar();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(TicketsService.mensajeError(e))));
+      }
     } finally {
       if (mounted) {
         setState(() => _abriendoFormulario = false);
@@ -199,8 +302,12 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
           final detalles = datos['detalles'] as List<Map<String, dynamic>>;
           final vehiculo = ticket['vehiculo'] as Map<String, dynamic>?;
           final sucursal = ticket['sucursal'] as Map<String, dynamic>?;
+          final revision = ticket['revision'] as Map<String, dynamic>?;
+          final editable =
+              !widget.soloLectura && ticket['estado'] != 'entregado';
 
-          final cotizacionCompleta = detalles.isNotEmpty &&
+          final cotizacionCompleta =
+              detalles.isNotEmpty &&
               detalles.every(
                 (detalle) =>
                     detalle['precio_mano_obra'] != null &&
@@ -225,6 +332,12 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                   'Ticket #${ticket['folio']}',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
+                if (editable)
+                  OutlinedButton.icon(
+                    onPressed: () => _editarTicket(ticket),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Actualizar ticket y diagnóstico'),
+                  ),
                 const SizedBox(height: 16),
                 Card(
                   child: Padding(
@@ -240,13 +353,20 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                         const SizedBox(height: 12),
                         Text('Placas: ${vehiculo?['placas'] ?? ''}'),
                         Text('Año: ${vehiculo?['anio'] ?? ''}'),
+                        if (vehiculo?['foto_path'] != null)
+                          FotoVehiculo(path: vehiculo!['foto_path'] as String),
+                        Text(
+                          'Revisión: ${revision == null ? 'Sin asignar' : TicketsService.nombrePersona(revision)}',
+                        ),
+                        Text(
+                          'Finalizado: ${_fecha(ticket['fecha_finalizado'])}',
+                        ),
+                        Text('Entregado: ${_fecha(ticket['fecha_entregado'])}'),
                         Text('Sucursal: ${sucursal?['nombre'] ?? ''}'),
                         Text(
                           'Estado: ${ticket['estado'].toString().replaceAll('_', ' ')}',
                         ),
-                        Text(
-                          'Recibido: ${_fecha(ticket['fecha_recibido'])}',
-                        ),
+                        Text('Recibido: ${_fecha(ticket['fecha_recibido'])}'),
                         const Divider(height: 28),
                         const Text(
                           'Motivo de ingreso',
@@ -274,14 +394,14 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 12),
-                if (!widget.soloLectura) ...[
+                if (editable && ticket['estado'] != 'terminado') ...[
                   FilledButton.icon(
-                    onPressed: _abriendoFormulario ? null : _agregarServicio,
+                    onPressed: _abriendoFormulario
+                        ? null
+                        : () => _agregarServicio(),
                     icon: const Icon(Icons.add),
                     label: Text(
-                      _abriendoFormulario
-                          ? 'Cargando...'
-                          : 'Agregar servicio',
+                      _abriendoFormulario ? 'Cargando...' : 'Agregar servicio',
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -301,8 +421,8 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                   final avance = detalle['fecha_fin'] != null
                       ? 'Finalizado'
                       : detalle['fecha_inicio'] != null
-                          ? 'En proceso'
-                          : 'Pendiente';
+                      ? 'En proceso'
+                      : 'Pendiente';
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -320,6 +440,33 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                             'Responsable: ${mecanico == null ? 'Sin asignar' : TicketsService.nombrePersona(mecanico)}',
                           ),
                           Text('Avance: $avance'),
+                          if (editable)
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: _abriendoFormulario
+                                      ? null
+                                      : () => _agregarServicio(detalle),
+                                  icon: const Icon(Icons.edit_outlined),
+                                  label: const Text(
+                                    'Editar servicio y precios',
+                                  ),
+                                ),
+                                if (detalle['fecha_fin'] == null &&
+                                    ticket['estado'] != 'terminado')
+                                  FilledButton(
+                                    onPressed: _abriendoFormulario
+                                        ? null
+                                        : () => _avanzarServicio(detalle),
+                                    child: Text(
+                                      detalle['fecha_inicio'] == null
+                                          ? 'Iniciar'
+                                          : 'Finalizar',
+                                    ),
+                                  ),
+                              ],
+                            ),
                           const SizedBox(height: 12),
                           Text(
                             detalle['descripcion_trabajo']?.toString() ?? '',
@@ -336,9 +483,7 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                           Text('Fin: ${_fecha(detalle['fecha_fin'])}'),
                           if (detalle['observaciones'] != null) ...[
                             const SizedBox(height: 12),
-                            Text(
-                              'Observaciones: ${detalle['observaciones']}',
-                            ),
+                            Text('Observaciones: ${detalle['observaciones']}'),
                           ],
                         ],
                       ),
@@ -350,8 +495,8 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
                   detalles.isEmpty
                       ? 'Total: sin servicios'
                       : cotizacionCompleta
-                          ? 'Total cotizado: ${_dinero(total)}'
-                          : 'Cotización pendiente de completar',
+                      ? 'Total cotizado: ${_dinero(total)}'
+                      : 'Cotización pendiente de completar',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ],
@@ -365,18 +510,19 @@ class _TicketDetalleScreenState extends State<TicketDetalleScreen> {
 
 class _AgregarServicioDialog extends StatefulWidget {
   final String idTicket;
+  final Map<String, dynamic>? detalle;
   final List<Map<String, dynamic>> servicios;
   final List<Map<String, dynamic>> mecanicos;
 
   const _AgregarServicioDialog({
     required this.idTicket,
+    this.detalle,
     required this.servicios,
     required this.mecanicos,
   });
 
   @override
-  State<_AgregarServicioDialog> createState() =>
-      _AgregarServicioDialogState();
+  State<_AgregarServicioDialog> createState() => _AgregarServicioDialogState();
 }
 
 class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
@@ -385,6 +531,7 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
   final _descripcion = TextEditingController();
   final _manoObra = TextEditingController();
   final _refacciones = TextEditingController();
+  final _observaciones = TextEditingController();
 
   String? _idServicio;
   String? _idMecanico;
@@ -393,7 +540,20 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
   bool _cerrando = false;
 
   @override
+  void initState() {
+    super.initState();
+    final d = widget.detalle;
+    _idServicio = d?['id_servicio'] as String?;
+    _idMecanico = d?['id_mecanico'] as String?;
+    _descripcion.text = d?['descripcion_trabajo'] as String? ?? '';
+    _manoObra.text = d?['precio_mano_obra']?.toString() ?? '';
+    _refacciones.text = d?['precio_refacciones']?.toString() ?? '';
+    _observaciones.text = d?['observaciones'] as String? ?? '';
+  }
+
+  @override
   void dispose() {
+    _observaciones.dispose();
     _descripcion.dispose();
     _manoObra.dispose();
     _refacciones.dispose();
@@ -403,7 +563,9 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
   String? _validarPrecio(String? value) {
     final texto = value?.trim() ?? '';
 
-    if (texto.isEmpty) return null;
+    if (texto.isEmpty) {
+      return null;
+    }
 
     if (!RegExp(r'^\d{1,10}([.,]\d{1,2})?$').hasMatch(texto)) {
       return 'Escribe un importe no negativo con máximo 2 decimales.';
@@ -413,20 +575,28 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
   }
 
   num? _precio(String texto) {
-    if (texto.trim().isEmpty) return null;
+    if (texto.trim().isEmpty) {
+      return null;
+    }
     return num.parse(texto.trim().replaceAll(',', '.'));
   }
 
   void _cancelar() {
-    if (_guardando || _cerrando) return;
+    if (_guardando || _cerrando) {
+      return;
+    }
 
     setState(() => _cerrando = true);
     Navigator.of(context).pop(false);
   }
 
   Future<void> _guardar() async {
-    if (_guardando || _cerrando) return;
-    if (!_form.currentState!.validate()) return;
+    if (_guardando || _cerrando) {
+      return;
+    }
+    if (!_form.currentState!.validate()) {
+      return;
+    }
 
     FocusScope.of(context).unfocus();
 
@@ -436,20 +606,34 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
     });
 
     try {
-      await _client
-          .from('detalle_ticket')
-          .insert({
-            'id_ticket': widget.idTicket,
-            'id_servicio': _idServicio,
-            'id_mecanico': _idMecanico,
-            'descripcion_trabajo': _descripcion.text.trim(),
-            'precio_mano_obra': _precio(_manoObra.text),
-            'precio_refacciones': _precio(_refacciones.text),
-          })
-          .select('id_detalle')
-          .single();
+      final datos = <String, dynamic>{
+        'id_ticket': widget.idTicket,
+        'id_servicio': _idServicio,
+        'id_mecanico': _idMecanico,
+        'descripcion_trabajo': _descripcion.text.trim(),
+        'precio_mano_obra': _precio(_manoObra.text),
+        'precio_refacciones': _precio(_refacciones.text),
+        'observaciones': _observaciones.text.trim(),
+      };
+      if (widget.detalle == null) {
+        await _client
+            .from('detalle_ticket')
+            .insert(datos)
+            .select('id_detalle')
+            .single();
+      } else {
+        await _client
+            .from('detalle_ticket')
+            .update(datos)
+            .eq('id_detalle', widget.detalle!['id_detalle'])
+            .eq('actualizado_en', widget.detalle!['actualizado_en'])
+            .select('id_detalle')
+            .single();
+      }
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _guardando = false;
@@ -458,7 +642,9 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
       return;
     }
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       _guardando = false;
@@ -466,7 +652,9 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.of(context).pop(true);
     });
   }
@@ -478,7 +666,9 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
     return PopScope(
       canPop: !_guardando,
       child: AlertDialog(
-        title: const Text('Agregar servicio'),
+        title: Text(
+          widget.detalle == null ? 'Agregar servicio' : 'Editar servicio',
+        ),
         content: SizedBox(
           width: 460,
           child: SingleChildScrollView(
@@ -488,10 +678,9 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
+                    initialValue: _idServicio,
                     isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Servicio',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Servicio'),
                     items: widget.servicios.map((servicio) {
                       return DropdownMenuItem<String>(
                         value: servicio['id_servicio'] as String,
@@ -501,7 +690,8 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
                         ),
                       );
                     }).toList(),
-                    onChanged: bloqueado
+                    onChanged:
+                        bloqueado || widget.detalle?['fecha_inicio'] != null
                         ? null
                         : (value) => _idServicio = value,
                     validator: (value) =>
@@ -509,6 +699,7 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
+                    initialValue: _idMecanico,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Mecánico responsable',
@@ -525,7 +716,8 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
                         ),
                       );
                     }).toList(),
-                    onChanged: bloqueado
+                    onChanged:
+                        bloqueado || widget.detalle?['fecha_inicio'] != null
                         ? null
                         : (value) => _idMecanico = value,
                     validator: (value) =>
@@ -577,10 +769,18 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
                     ),
                     validator: _validarPrecio,
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Vacío: pendiente de cotizar. Cero: sin cargo.',
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _observaciones,
+                    enabled: !bloqueado,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Observaciones',
+                    ),
                   ),
+                  const SizedBox(height: 12),
+                  const Text('Vacío: pendiente de cotizar. Cero: sin cargo.'),
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
@@ -607,8 +807,8 @@ class _AgregarServicioDialogState extends State<_AgregarServicioDialog> {
               _guardando
                   ? 'Guardando...'
                   : _cerrando
-                      ? 'Cerrando...'
-                      : 'Agregar',
+                  ? 'Cerrando...'
+                  : 'Guardar',
             ),
           ),
         ],

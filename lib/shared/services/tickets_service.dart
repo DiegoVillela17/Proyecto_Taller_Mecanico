@@ -12,14 +12,12 @@ class TicketsService {
             'cliente:usuarios!vehiculos_id_cliente_fkey(nombre, apellidos)',
           )
           .order('marca'),
-      _client
-          .from('sucursales')
-          .select('id_sucursal, nombre')
-          .order('nombre'),
+      _client.from('sucursales').select('id_sucursal, nombre').order('nombre'),
       _client
           .from('usuarios')
-          .select('id_usuario, nombre, apellidos')
+          .select('id_usuario, nombre, apellidos, id_sucursal')
           .eq('rol', 'mecanico')
+          .eq('activo', true)
           .order('nombre'),
     ]);
 
@@ -57,8 +55,8 @@ class TicketsService {
   }
 
   static String nombrePersona(Map<String, dynamic> persona) {
-    final nombre =
-        '${persona['nombre'] ?? ''} ${persona['apellidos'] ?? ''}'.trim();
+    final nombre = '${persona['nombre'] ?? ''} ${persona['apellidos'] ?? ''}'
+        .trim();
 
     return nombre.isEmpty ? 'Sin nombre registrado' : nombre;
   }
@@ -73,6 +71,8 @@ class TicketsService {
               'Vuelve a cargar las opciones.';
         case '23514':
           return 'Revisa los datos del ticket.';
+        case 'PGRST116':
+          return 'El registro cambió o ya no está disponible. Actualiza la pantalla e inténtalo otra vez.';
         case 'P0001':
           return error.message;
       }

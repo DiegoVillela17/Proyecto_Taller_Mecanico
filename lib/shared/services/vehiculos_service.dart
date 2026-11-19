@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class VehiculosService {
@@ -12,10 +13,12 @@ class VehiculosService {
       throw StateError('No hay una sesión activa.');
     }
 
-    var consulta = _client.from('vehiculos').select(
-      'id_vehiculo, id_cliente, marca, modelo, anio, placas, '
-      'cliente:usuarios!vehiculos_id_cliente_fkey(nombre, apellidos)',
-    );
+    var consulta = _client
+        .from('vehiculos')
+        .select(
+          'id_vehiculo, id_cliente, marca, modelo, anio, placas, foto_path, actualizado_en, '
+          'cliente:usuarios!vehiculos_id_cliente_fkey(nombre, apellidos)',
+        );
 
     if (!esAdministrador) {
       consulta = consulta.eq('id_cliente', usuario.id);
@@ -39,6 +42,11 @@ class VehiculosService {
     required String modelo,
     required int anio,
     required String placas,
+    Uint8List? foto,
+    String? tipoFoto,
+    String? fotoAnterior,
+    String? actualizadoEn,
+    bool quitarFoto = false,
   }) async {
     final datos = <String, dynamic>{
       'marca': marca.trim(),
@@ -47,34 +55,80 @@ class VehiculosService {
       'placas': placas.trim().toUpperCase(),
     };
 
-    if (idVehiculo == null) {
-      datos['id_cliente'] = idCliente;
-
-      await _client
+    String? nuevaRuta;
+    if (foto != null) {
+      final extension = tipoFoto == 'image/png'
+          ? 'png'
+          : tipoFoto == 'image/webp'
+          ? 'webp'
+          : 'jpg';
+      nuevaRuta =
+          '${_client.auth.currentUser!.id}/${DateTime.now().microsecondsSinceEpoch}.$extension';
+      await _client.storage
           .from('vehiculos')
-          .insert(datos)
-          .select('id_vehiculo')
-          .single();
-    } else {
-      await _client
-          .from('vehiculos')
-          .update(datos)
-          .eq('id_vehiculo', idVehiculo)
-          .select('id_vehiculo')
-          .single();
+          .uploadBinary(
+            nuevaRuta,
+            foto,
+            fileOptions: FileOptions(contentType: tipoFoto, upsert: false),
+          );
+      datos['foto_path'] = nuevaRuta;
+    } else if (quitarFoto) {
+      datos['foto_path'] = null;
+    }
+    try {
+      if (idVehiculo == null) {
+        datos['id_cliente'] = idCliente;
+        await _client
+            .from('vehiculos')
+            .insert(datos)
+            .select('id_vehiculo')
+            .single();
+      } else {
+        var consulta = _client
+            .from('vehiculos')
+            .update(datos)
+            .eq('id_vehiculo', idVehiculo);
+        if (actualizadoEn != null) {
+          consulta = consulta.eq('actualizado_en', actualizadoEn);
+        }
+        await consulta.select('id_vehiculo').single();
+      }
+    } on PostgrestException {
+      if (nuevaRuta != null) {
+        try {
+          await _client.storage.from('vehiculos').remove([nuevaRuta]);
+        } catch (_) {}
+      }
+      rethrow;
+    } catch (_) {
+      // No borrar el archivo si la respuesta se perdió: podría haberse guardado
+      // la referencia. Evita dejar un vehículo apuntando a una foto eliminada.
+      rethrow;
+    }
+    if ((nuevaRuta != null || quitarFoto) && fotoAnterior != null) {
+      try {
+        await _client.storage.from('vehiculos').remove([fotoAnterior]);
+      } catch (_) {
+        /* La foto actual ya quedó guardada. */
+      }
     }
   }
 
   static String nombreCliente(Map<String, dynamic>? cliente) {
-    if (cliente == null) return 'Cliente sin información';
+    if (cliente == null) {
+      return 'Cliente sin información';
+    }
 
-    final nombre =
-        '${cliente['nombre'] ?? ''} ${cliente['apellidos'] ?? ''}'.trim();
+    final nombre = '${cliente['nombre'] ?? ''} ${cliente['apellidos'] ?? ''}'
+        .trim();
 
     return nombre.isEmpty ? 'Cliente sin nombre' : nombre;
   }
 
   static String mensajeError(Object error) {
+    if (error is StorageException) {
+      return 'No se pudo guardar la foto. Usa JPG, PNG o WebP de máximo 5 MB y verifica el almacenamiento.';
+    }
     if (error is PostgrestException) {
       switch (error.code) {
         case '42501':

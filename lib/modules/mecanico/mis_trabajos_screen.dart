@@ -1,3 +1,4 @@
+import '../../shared/widgets/foto_vehiculo.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -31,7 +32,7 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
       throw StateError('No hay una sesión activa.');
     }
 
-    return await _client
+    final servicios = await _client
         .from('detalle_ticket')
         .select(
           'id_detalle, descripcion_trabajo, observaciones, '
@@ -39,12 +40,34 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
           'servicio:servicios(nombre), '
           'ticket:tickets('
           'folio, motivo_ingreso, diagnostico, '
-          'vehiculo:vehiculos(marca, modelo, anio, placas), '
+          'vehiculo:vehiculos(marca, modelo, anio, placas, foto_path), '
           'sucursal:sucursales(nombre)'
           ')',
         )
         .eq('id_mecanico', usuario.id)
         .order('creado_en', ascending: false);
+    final revisiones = await _client
+        .from('tickets')
+        .select(
+          'id_ticket,folio,motivo_ingreso,diagnostico,estado,fecha_recibido,fecha_finalizado,'
+          'vehiculo:vehiculos(marca,modelo,anio,placas,foto_path),sucursal:sucursales(nombre)',
+        )
+        .eq('id_mecanico_revision', usuario.id)
+        .order('creado_en', ascending: false);
+    return [
+      ...revisiones.map(
+        (t) => <String, dynamic>{
+          'ticket': t,
+          'servicio': {'nombre': 'Revisión inicial'},
+          'descripcion_trabajo': t['motivo_ingreso'],
+          'observaciones': t['diagnostico'],
+          'fecha_inicio': null,
+          'fecha_fin': null,
+          'es_revision': true,
+        },
+      ),
+      ...servicios,
+    ];
   }
 
   Future<void> _recargar() async {
@@ -58,18 +81,34 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
   }
 
   String _avance(Map<String, dynamic> trabajo) {
-    if (trabajo['fecha_fin'] != null) return 'Finalizado';
-    if (trabajo['fecha_inicio'] != null) return 'En proceso';
+    if (trabajo['es_revision'] == true) {
+      final estado = (trabajo['ticket'] as Map<String, dynamic>)['estado'];
+      return estado == 'recibido'
+          ? 'Pendiente'
+          : estado == 'en_revision'
+          ? 'En proceso'
+          : 'Finalizado';
+    }
+    if (trabajo['fecha_fin'] != null) {
+      return 'Finalizado';
+    }
+    if (trabajo['fecha_inicio'] != null) {
+      return 'En proceso';
+    }
 
     return 'Pendiente';
   }
 
   String _fecha(dynamic valor) {
-    if (valor == null) return 'Sin registrar';
+    if (valor == null) {
+      return 'Sin registrar';
+    }
 
     final fecha = DateTime.tryParse(valor.toString())?.toLocal();
 
-    if (fecha == null) return 'Sin registrar';
+    if (fecha == null) {
+      return 'Sin registrar';
+    }
 
     String dos(int numero) => numero.toString().padLeft(2, '0');
 
@@ -90,11 +129,9 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
       servicio?['nombre'],
     ].join(' ').toLowerCase();
 
-    final coincideBusqueda =
-        texto.contains(_busqueda.trim().toLowerCase());
+    final coincideBusqueda = texto.contains(_busqueda.trim().toLowerCase());
 
-    final coincideFiltro =
-        _filtro == 'Todos' || _avance(trabajo) == _filtro;
+    final coincideFiltro = _filtro == 'Todos' || _avance(trabajo) == _filtro;
 
     return coincideBusqueda && coincideFiltro;
   }
@@ -107,16 +144,9 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            etiqueta,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
+          Text(etiqueta, style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text(
-            texto == null || texto.isEmpty
-                ? 'Sin registrar'
-                : texto,
-          ),
+          Text(texto == null || texto.isEmpty ? 'Sin registrar' : texto),
         ],
       ),
     );
@@ -159,8 +189,10 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
                 _dato(
                   'Vehículo',
                   '${vehiculo?['marca'] ?? ''} '
-                  '${vehiculo?['modelo'] ?? ''}',
+                      '${vehiculo?['modelo'] ?? ''}',
                 ),
+                if (vehiculo?['foto_path'] != null)
+                  FotoVehiculo(path: vehiculo!['foto_path'] as String),
                 _dato('Año', vehiculo?['anio']),
                 _dato('Placas', vehiculo?['placas']),
                 _dato('Sucursal', sucursal?['nombre']),
@@ -169,13 +201,15 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
                 const SizedBox(height: 16),
                 _dato('Motivo de ingreso', ticket?['motivo_ingreso']),
                 _dato('Diagnóstico', ticket?['diagnostico']),
-                _dato(
-                  'Trabajo asignado',
-                  trabajo['descripcion_trabajo'],
-                ),
+                _dato('Trabajo asignado', trabajo['descripcion_trabajo']),
                 _dato('Observaciones', trabajo['observaciones']),
-                _dato('Inicio', _fecha(trabajo['fecha_inicio'])),
-                _dato('Finalización', _fecha(trabajo['fecha_fin'])),
+                if (trabajo['es_revision'] != true) ...[
+                  _dato('Inicio', _fecha(trabajo['fecha_inicio'])),
+                  _dato('Finalización', _fecha(trabajo['fecha_fin'])),
+                ] else
+                  const Text(
+                    'El avance de la revisión corresponde al estado del ticket.',
+                  ),
               ],
             ),
           ),
@@ -211,9 +245,7 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Consulta los servicios que tienes asignados.',
-              ),
+              const Text('Consulta los servicios que tienes asignados.'),
               const SizedBox(height: 16),
               TextField(
                 decoration: const InputDecoration(
@@ -228,23 +260,20 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: [
-                    'Todos',
-                    'Pendiente',
-                    'En proceso',
-                    'Finalizado',
-                  ].map((filtro) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(filtro),
-                        selected: _filtro == filtro,
-                        onSelected: (_) {
-                          setState(() => _filtro = filtro);
-                        },
-                      ),
-                    );
-                  }).toList(),
+                  children: ['Todos', 'Pendiente', 'En proceso', 'Finalizado']
+                      .map((filtro) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(filtro),
+                            selected: _filtro == filtro,
+                            onSelected: (_) {
+                              setState(() => _filtro = filtro);
+                            },
+                          ),
+                        );
+                      })
+                      .toList(),
                 ),
               ),
             ],
@@ -255,9 +284,7 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
             future: _trabajos,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
+                return const Center(child: CircularProgressIndicator());
               }
 
               if (snapshot.hasError) {
@@ -293,7 +320,7 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
                       todos.isEmpty
                           ? 'Todavía no tienes servicios asignados.'
                           : 'No hay trabajos que coincidan '
-                              'con la búsqueda y el filtro.',
+                                'con la búsqueda y el filtro.',
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -311,8 +338,7 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
                   },
                   itemBuilder: (context, index) {
                     final trabajo = resultados[index];
-                    final ticket =
-                        trabajo['ticket'] as Map<String, dynamic>?;
+                    final ticket = trabajo['ticket'] as Map<String, dynamic>?;
                     final vehiculo =
                         ticket?['vehiculo'] as Map<String, dynamic>?;
                     final servicio =
@@ -330,8 +356,7 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
                               Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor:
-                                        colores.primaryContainer,
+                                    backgroundColor: colores.primaryContainer,
                                     child: Icon(
                                       Icons.build_outlined,
                                       color: colores.onPrimaryContainer,
@@ -358,18 +383,17 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                              Text(
+                                'Sucursal: ${(ticket?['sucursal'] as Map<String, dynamic>?)?['nombre'] ?? 'Sin información'}',
+                              ),
                               const SizedBox(height: 6),
                               Text(
                                 '${vehiculo?['marca'] ?? ''} '
                                 '${vehiculo?['modelo'] ?? ''}',
                               ),
-                              Text(
-                                'Placas: ${vehiculo?['placas'] ?? '—'}',
-                              ),
+                              Text('Placas: ${vehiculo?['placas'] ?? '—'}'),
                               const SizedBox(height: 12),
-                              Chip(
-                                label: Text(_avance(trabajo)),
-                              ),
+                              Chip(label: Text(_avance(trabajo))),
                             ],
                           ),
                         ),

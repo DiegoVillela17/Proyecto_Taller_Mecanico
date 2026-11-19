@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../shared/services/tickets_service.dart';
 
 class TicketFormScreen extends StatefulWidget {
-  const TicketFormScreen({super.key});
+  final String? idSucursal;
+  const TicketFormScreen({super.key, this.idSucursal});
 
   @override
   State<TicketFormScreen> createState() => _TicketFormScreenState();
@@ -25,6 +26,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
   @override
   void initState() {
     super.initState();
+    _idSucursal = widget.idSucursal;
     _opciones = _service.obtenerOpciones();
   }
 
@@ -45,7 +47,9 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
   }
 
   Future<void> _guardar() async {
-    if (_guardando || !_form.currentState!.validate()) return;
+    if (_guardando || !_form.currentState!.validate()) {
+      return;
+    }
 
     FocusScope.of(context).unfocus();
 
@@ -62,11 +66,15 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
         motivoIngreso: _motivo.text,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       Navigator.of(context).pop(ticket);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _error = TicketsService.mensajeError(error);
@@ -87,10 +95,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
           children: [
             const Icon(Icons.info_outline, size: 48),
             const SizedBox(height: 16),
-            Text(
-              mensaje,
-              textAlign: TextAlign.center,
-            ),
+            Text(mensaje, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _recargar,
@@ -108,28 +113,24 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
     final colores = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nuevo ticket'),
-      ),
+      appBar: AppBar(title: const Text('Nuevo ticket')),
       body: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
         future: _opciones,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
-            return _aviso(
-              TicketsService.mensajeError(snapshot.error!),
-            );
+            return _aviso(TicketsService.mensajeError(snapshot.error!));
           }
 
           final opciones = snapshot.data!;
           final vehiculos = opciones['vehiculos']!;
           final sucursales = opciones['sucursales']!;
-          final mecanicos = opciones['mecanicos']!;
+          final mecanicos = opciones['mecanicos']!
+              .where((m) => m['id_sucursal'] == _idSucursal)
+              .toList();
 
           if (vehiculos.isEmpty) {
             return _aviso(
@@ -153,8 +154,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
             }
           }
 
-          final cliente =
-              seleccionado?['cliente'] as Map<String, dynamic>?;
+          final cliente = seleccionado?['cliente'] as Map<String, dynamic>?;
 
           return Align(
             alignment: Alignment.topCenter,
@@ -236,7 +236,10 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
                         onChanged: _guardando
                             ? null
                             : (value) {
-                                setState(() => _idSucursal = value);
+                                setState(() {
+                                  _idSucursal = value;
+                                  _idMecanico = null;
+                                });
                               },
                         validator: (value) {
                           return value == null
@@ -246,6 +249,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
                       ),
                       const SizedBox(height: 20),
                       DropdownButtonFormField<String>(
+                        key: ValueKey(_idSucursal),
                         initialValue: _idMecanico ?? '',
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -259,8 +263,9 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
                           ),
                           ...mecanicos.map((mecanico) {
                             final id = mecanico['id_usuario'] as String;
-                            final nombre =
-                                TicketsService.nombrePersona(mecanico);
+                            final nombre = TicketsService.nombrePersona(
+                              mecanico,
+                            );
 
                             return DropdownMenuItem<String>(
                               value: id,
@@ -275,17 +280,16 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
                             ? null
                             : (value) {
                                 setState(() {
-                                  _idMecanico =
-                                      value == '' ? null : value;
+                                  _idMecanico = value == '' ? null : value;
                                 });
                               },
                       ),
                       const SizedBox(height: 8),
                       Text(
                         mecanicos.isEmpty
-                            ? 'Todavía no hay cuentas con rol mecánico.'
+                            ? 'Selecciona una sucursal con mecánicos activos o asigna la revisión después.'
                             : 'El mecánico de revisión puede ser distinto '
-                                'de los responsables de cada servicio.',
+                                  'de los responsables de cada servicio.',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 20),
