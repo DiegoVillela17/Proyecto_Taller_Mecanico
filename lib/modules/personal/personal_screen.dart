@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/services/tickets_service.dart';
+import '../../shared/widgets/encabezado_seccion.dart';
 
 class PersonalScreen extends StatefulWidget {
   final String? idSucursal;
@@ -62,14 +63,12 @@ class _PersonalScreenState extends State<PersonalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Personal',
-                style: Theme.of(context).textTheme.headlineSmall,
+              const EncabezadoSeccion(
+                titulo: 'Personal del taller',
+                descripcion: 'Administra mecánicos, sucursales y disponibilidad.',
+                icono: Icons.groups_rounded,
               ),
-              const Text(
-                'Cada mecánico pertenece a una sucursal. Conservamos el historial al desactivarlo.',
-              ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 18),
               TextField(
                 decoration: const InputDecoration(
                   labelText: 'Buscar mecánico',

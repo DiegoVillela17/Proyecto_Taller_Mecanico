@@ -1,4 +1,5 @@
 import '../../shared/widgets/foto_vehiculo.dart';
+import '../../shared/widgets/encabezado_seccion.dart';
 import 'package:flutter/material.dart';
 
 import '../../shared/services/vehiculos_service.dart';
@@ -93,19 +94,14 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                widget.esAdministrador
-                    ? 'Vehículos registrados'
-                    : 'Mis vehículos',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                widget.esAdministrador
+              EncabezadoSeccion(
+                titulo: widget.esAdministrador ? 'Vehículos registrados' : 'Mis vehículos',
+                descripcion: widget.esAdministrador
                     ? 'Administra los vehículos y sus propietarios.'
-                    : 'Estos son los vehículos registrados a tu nombre.',
+                    : 'Consulta los vehículos registrados a tu nombre.',
+                icono: Icons.directions_car_filled_rounded,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
               TextField(
                 controller: _buscador,
                 decoration: InputDecoration(

@@ -131,34 +131,66 @@ class _AccesoScreenState extends State<AccesoScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const CircleAvatar(
-                      radius: 42,
-                      backgroundColor: Color(0xFF103B70),
-                      child: Icon(
-                        Icons.car_repair,
-                        size: 46,
-                        color: Colors.white,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 28,
+                        horizontal: 22,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF193B5C), Color(0xFF10243A)],
+                        ),
+                        borderRadius: BorderRadius.circular(26),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x24142B45),
+                            blurRadius: 22,
+                            offset: Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF2A900),
+                              borderRadius: BorderRadius.circular(23),
+                            ),
+                            child: const Icon(
+                              Icons.car_repair_rounded,
+                              size: 43,
+                              color: Color(0xFF142B45),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'MI TALLER',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 2.2,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            _registro
+                                ? 'Crea tu cuenta de cliente'
+                                : 'Tu vehículo, en buenas manos',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFFD5E2EF),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'MI TALLER',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFF103B70),
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _registro
-                          ? 'Crea tu cuenta de cliente'
-                          : 'Consulta el cuidado de tu vehículo',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
                     if (_registro) ...[
                       _campo(
                         _nombre,
