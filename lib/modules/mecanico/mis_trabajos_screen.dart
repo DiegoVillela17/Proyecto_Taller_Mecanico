@@ -1,4 +1,5 @@
 import '../../shared/widgets/foto_vehiculo.dart';
+import '../../shared/widgets/encabezado_seccion.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -229,24 +230,17 @@ class _MisTrabajosScreenState extends State<MisTrabajosScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Mis trabajos',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Actualizar trabajos',
-                    onPressed: _recargar,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
+              EncabezadoSeccion(
+                titulo: 'Mis trabajos',
+                descripcion: 'Organiza tus servicios y revisa su avance.',
+                icono: Icons.handyman_rounded,
+                accion: IconButton.filledTonal(
+                  tooltip: 'Actualizar trabajos',
+                  onPressed: _recargar,
+                  icon: const Icon(Icons.refresh),
+                ),
               ),
-              const SizedBox(height: 6),
-              const Text('Consulta los servicios que tienes asignados.'),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               TextField(
                 decoration: const InputDecoration(
                   hintText: 'Buscar por folio, placas o servicio',

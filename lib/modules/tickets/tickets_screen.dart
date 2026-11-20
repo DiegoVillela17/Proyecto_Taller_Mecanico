@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/services/tickets_service.dart';
 import '../../shared/widgets/foto_vehiculo.dart';
+import '../../shared/widgets/encabezado_seccion.dart';
 import 'ticket_detalle_screen.dart';
 import 'ticket_form_screen.dart';
 
@@ -134,11 +135,14 @@ class _TicketsScreenState extends State<TicketsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                widget.soloLectura ? 'Mis tickets' : 'Tickets del taller',
-                style: Theme.of(context).textTheme.headlineSmall,
+              EncabezadoSeccion(
+                titulo: widget.soloLectura ? 'Mis tickets' : 'Tickets del taller',
+                descripcion: widget.soloLectura
+                    ? 'Consulta el avance y los detalles de tus servicios.'
+                    : 'Administra las órdenes de servicio del taller.',
+                icono: Icons.receipt_long_rounded,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               if (_mostrarSelector && _sucursales.isNotEmpty) ...[
                 DropdownButtonFormField<String>(
                   key: ValueKey(_idSucursal),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../tickets/tickets_screen.dart';
 import '../personal/personal_screen.dart';
+import '../../shared/widgets/encabezado_seccion.dart';
 
 class SucursalesScreen extends StatefulWidget {
   const SucursalesScreen({super.key});
@@ -36,16 +37,18 @@ class _SucursalesScreenState extends State<SucursalesScreen> {
   Widget build(BuildContext context) => Column(
     children: [
       Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
         child: Row(
           children: [
-            Expanded(
-              child: Text(
-                'Sucursales',
-                style: Theme.of(context).textTheme.headlineSmall,
+            const Expanded(
+              child: EncabezadoSeccion(
+                titulo: 'Sucursales',
+                descripcion: 'Consulta la actividad y el personal de cada taller.',
+                icono: Icons.storefront_rounded,
               ),
             ),
-            IconButton(
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
               onPressed: _recargar,
               icon: const Icon(Icons.refresh),
               tooltip: 'Actualizar sucursales',
@@ -83,13 +86,8 @@ class _SucursalesScreenState extends State<SucursalesScreen> {
                 children: [
                   for (final s in snapshot.data!)
                     Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.store),
-                        title: Text(s['nombre'] as String),
-                        subtitle: Text(
-                          '${s['direccion']}\n${s['abiertos']} tickets sin entregar · ${s['mecanicos']} mecánicos activos',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
                         onTap: () async {
                           await Navigator.of(context).push(
                             MaterialPageRoute(
@@ -100,6 +98,62 @@ class _SucursalesScreenState extends State<SucursalesScreen> {
                             await _recargar();
                           }
                         },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: Icon(
+                                  Icons.storefront_rounded,
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      s['nombre'] as String,
+                                      style: Theme.of(context).textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      s['direccion']?.toString() ?? 'Dirección no disponible',
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 6,
+                                      children: [
+                                        Chip(
+                                          avatar: const Icon(Icons.assignment_outlined, size: 16),
+                                          label: Text('${s['abiertos']} tickets abiertos'),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        Chip(
+                                          avatar: const Icon(Icons.engineering_outlined, size: 16),
+                                          label: Text('${s['mecanicos']} mecánicos'),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                 ],
